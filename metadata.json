@@ -1,0 +1,7 @@
+{
+  "name": "智食记",
+  "description": "拍照识别食物，自动计算热量与营养成分，生成您的每日饮食记录。",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
