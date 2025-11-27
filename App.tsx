@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Utensils, Calendar, Clock, ChevronDown, Trash2, Leaf, Flame, Sparkles, ArrowDown, Keyboard, AlertCircle, Search, Filter, X, Camera, Home, History, Plus, FileText, Activity, ChevronRight, TrendingUp, Carrot, GlassWater, ScanLine } from 'lucide-react';
 import { analyzeFoodImage, generateHealthReport } from './services/geminiService';
+import { initDB, getAllRecords, addRecord as addDbRecord, deleteRecord as deleteDbRecord } from './services/dbService';
 import { FoodItem, MealRecord, AnalysisStatus, HealthReport } from './types';
 import CameraInput from './components/CameraInput';
 import NutritionChart from './components/NutritionChart';
@@ -29,60 +30,20 @@ const App: React.FC = () => {
   const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
 
-  // Load from local storage on mount
+  // Load from IndexedDB on mount
   useEffect(() => {
-    const saved = localStorage.getItem('mealRecords');
-    if (saved) {
+    const loadData = async () => {
       try {
-        setRecords(JSON.parse(saved));
+        await initDB();
+        const savedRecords = await getAllRecords();
+        setRecords(savedRecords);
       } catch (e) {
-        console.error("Failed to parse history", e);
+        console.error("Failed to load records from DB", e);
+        setError("无法加载历史记录");
       }
-    } else {
-        // Init Mock Data
-         const mockData: MealRecord[] = [
-          {
-            id: 'mock-1',
-            timestamp: Date.now() - 1000 * 60 * 60 * 2, // 2 hours ago
-            imageUri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=400&fit=crop',
-            mealType: 'Lunch',
-            totalNutrition: { calories: 650, protein: 25, carbs: 80, fat: 20 },
-            items: [
-              { name: '牛油果沙拉', portion: '1份', nutrition: { calories: 350, protein: 8, carbs: 20, fat: 25 }, healthTip: '牛油果富含健康的不饱和脂肪酸，有助于心血管健康。' },
-              { name: '全麦面包', portion: '2片', nutrition: { calories: 300, protein: 17, carbs: 60, fat: 5 }, healthTip: '全麦面包比白面包含有更多的膳食纤维，饱腹感更强。' }
-            ]
-          },
-          {
-            id: 'mock-2',
-            timestamp: Date.now() - 1000 * 60 * 60 * 6, // 6 hours ago
-            imageUri: 'https://images.unsplash.com/photo-1504754524776-3503a1955cf2?w=400&h=400&fit=crop',
-            mealType: 'Breakfast',
-            totalNutrition: { calories: 420, protein: 15, carbs: 55, fat: 12 },
-            items: [
-              { name: '燕麦粥', portion: '1碗', nutrition: { calories: 250, protein: 8, carbs: 45, fat: 4 }, healthTip: '燕麦富含β-葡聚糖，有助于调节血糖水平。' },
-              { name: '蓝莓', portion: '50g', nutrition: { calories: 30, protein: 0.5, carbs: 7, fat: 0.2 }, healthTip: '蓝莓是抗氧化剂之王，有助于延缓衰老。' },
-               { name: '煮鸡蛋', portion: '1个', nutrition: { calories: 140, protein: 6.5, carbs: 3, fat: 7.8 }, healthTip: '鸡蛋是优质蛋白质的来源，且吸收率极高。' }
-            ]
-          },
-          {
-            id: 'mock-3',
-            timestamp: Date.now() - 1000 * 60 * 60 * 26, // 26 hours ago (Yesterday)
-            imageUri: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&h=400&fit=crop',
-            mealType: 'Dinner',
-            totalNutrition: { calories: 550, protein: 30, carbs: 40, fat: 25 },
-            items: [
-              { name: '玛格丽特披萨', portion: '2片', nutrition: { calories: 550, protein: 30, carbs: 40, fat: 25 }, healthTip: '披萨热量较高，建议搭配蔬菜沙拉食用以增加饱腹感。' }
-            ]
-          }
-        ];
-        setRecords(mockData);
-    }
+    };
+    loadData();
   }, []);
-
-  // Save to local storage whenever records change
-  useEffect(() => {
-    localStorage.setItem('mealRecords', JSON.stringify(records));
-  }, [records]);
 
   // Helper to determine meal type based on time
   const getMealTypeByTime = (): MealRecord['mealType'] => {
@@ -125,6 +86,10 @@ const App: React.FC = () => {
         mealType: getMealTypeByTime(),
       };
 
+      // Save to DB first
+      await addDbRecord(newRecord);
+      
+      // Update State
       setRecords((prev) => [newRecord, ...prev]);
       setStatus(AnalysisStatus.SUCCESS);
     } catch (err: any) {
@@ -140,25 +105,39 @@ const App: React.FC = () => {
     }
   };
 
-  const handleManualSubmit = (item: FoodItem) => {
-    const newRecord: MealRecord = {
-      id: Date.now().toString(),
-      timestamp: Date.now(),
-      imageUri: MANUAL_IMAGE_PLACEHOLDER,
-      items: [item],
-      totalNutrition: item.nutrition,
-      mealType: getMealTypeByTime(),
-    };
+  const handleManualSubmit = async (item: FoodItem) => {
+    try {
+      const newRecord: MealRecord = {
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        imageUri: MANUAL_IMAGE_PLACEHOLDER,
+        items: [item],
+        totalNutrition: item.nutrition,
+        mealType: getMealTypeByTime(),
+      };
 
-    setRecords((prev) => [newRecord, ...prev]);
-    setShowManualModal(false);
-    setError(null);
-    setActiveTab('home');
+      // Save to DB
+      await addDbRecord(newRecord);
+
+      setRecords((prev) => [newRecord, ...prev]);
+      setShowManualModal(false);
+      setError(null);
+      setActiveTab('home');
+    } catch (e) {
+      console.error("Failed to save manual record", e);
+      setError("保存失败");
+    }
   };
 
-  const deleteRecord = (id: string) => {
+  const deleteRecord = async (id: string) => {
     if (confirm('确定要删除这条记录吗？')) {
-      setRecords((prev) => prev.filter((r) => r.id !== id));
+      try {
+        await deleteDbRecord(id);
+        setRecords((prev) => prev.filter((r) => r.id !== id));
+      } catch (e) {
+        console.error("Failed to delete record", e);
+        alert("删除失败");
+      }
     }
   };
 
@@ -462,11 +441,13 @@ const App: React.FC = () => {
             <div className="relative -mt-10 mx-2">
                {/* Tooltip */}
                {todaysRecords.length === 0 && !error && activeTab === 'home' && (
-                  <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 flex flex-col items-center w-max pointer-events-none animate-bounce">
-                    <div className="bg-gray-800 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg">
-                      拍一拍
-                    </div>
-                    <div className="w-0 h-0 border-l-[4px] border-l-transparent border-t-[6px] border-t-gray-800 border-r-[4px] border-r-transparent mt-[-1px]"></div>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-50 pointer-events-none">
+                     <div className="flex flex-col items-center animate-bounce">
+                        <div className="bg-gray-800 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg whitespace-nowrap">
+                           拍一拍
+                        </div>
+                        <div className="w-0 h-0 border-l-[4px] border-l-transparent border-t-[6px] border-t-gray-800 border-r-[4px] border-r-transparent mt-[-1px]"></div>
+                     </div>
                   </div>
                )}
                
