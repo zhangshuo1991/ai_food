@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Utensils, Calendar, Clock, ChevronDown, Trash2, Leaf, Flame, Sparkles, ArrowDown, Keyboard, AlertCircle, Search, Filter, X, Camera, Home, History, Plus } from 'lucide-react';
-import { analyzeFoodImage } from './services/geminiService';
-import { FoodItem, MealRecord, AnalysisStatus } from './types';
+import { Utensils, Calendar, Clock, ChevronDown, Trash2, Leaf, Flame, Sparkles, ArrowDown, Keyboard, AlertCircle, Search, Filter, X, Camera, Home, History, Plus, FileText, Activity, ChevronRight, TrendingUp, Carrot, GlassWater, ScanLine } from 'lucide-react';
+import { analyzeFoodImage, generateHealthReport } from './services/geminiService';
+import { FoodItem, MealRecord, AnalysisStatus, HealthReport } from './types';
 import CameraInput from './components/CameraInput';
 import NutritionChart from './components/NutritionChart';
 import ManualEntryModal from './components/ManualEntryModal';
@@ -23,6 +23,11 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [dateRange, setDateRange] = useState<{start: string, end: string}>({ start: '', end: '' });
+
+  // Health Report State
+  const [reportStatus, setReportStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
+  const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Load from local storage on mount
   useEffect(() => {
@@ -91,7 +96,7 @@ const App: React.FC = () => {
   const handleImageSelected = async (base64Image: string) => {
     setStatus(AnalysisStatus.ANALYZING);
     setError(null);
-    setActiveTab('home'); // Switch to home to see the result
+    setActiveTab('home');
 
     try {
       const items = await analyzeFoodImage(base64Image);
@@ -153,6 +158,28 @@ const App: React.FC = () => {
   const deleteRecord = (id: string) => {
     if (confirm('确定要删除这条记录吗？')) {
       setRecords((prev) => prev.filter((r) => r.id !== id));
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (records.length < 2) {
+      alert("记录太少，无法生成有意义的报告。请多记录几餐后再试。");
+      return;
+    }
+    
+    setReportStatus(AnalysisStatus.ANALYZING);
+    try {
+      // Analyze last 30 records or filtered list
+      const dataToAnalyze = historyList.slice(0, 30); 
+      const report = await generateHealthReport(dataToAnalyze);
+      setHealthReport(report);
+      setShowReportModal(true);
+      setReportStatus(AnalysisStatus.SUCCESS);
+    } catch (e) {
+      alert("生成周报失败，请稍后重试");
+      setReportStatus(AnalysisStatus.ERROR);
+    } finally {
+      setReportStatus(AnalysisStatus.IDLE);
     }
   };
 
@@ -346,6 +373,30 @@ const App: React.FC = () => {
                 </button>
               </div>
 
+              {/* Weekly Report Trigger Card */}
+              {!searchTerm && !dateRange.start && (
+                <button 
+                  onClick={handleGenerateReport}
+                  disabled={reportStatus === AnalysisStatus.ANALYZING}
+                  className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-2xl p-4 text-white shadow-lg shadow-violet-200 flex items-center justify-between group active:scale-[0.98] transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                       {reportStatus === AnalysisStatus.ANALYZING ? (
+                         <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
+                       ) : (
+                         <Activity className="w-5 h-5 text-white" />
+                       )}
+                     </div>
+                     <div className="text-left">
+                       <h3 className="font-bold text-sm">生成健康周报</h3>
+                       <p className="text-[10px] text-white/80 font-medium">AI 深度分析 · 蔬果 · 水分</p>
+                     </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-white/70 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
+
               {/* Filters */}
               {(showFilters || dateRange.start || dateRange.end) && (
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-2 gap-3 animate-in slide-in-from-top-2">
@@ -451,12 +502,137 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal: Manual Entry */}
       <ManualEntryModal 
         isOpen={showManualModal}
         onClose={() => setShowManualModal(false)}
         onSubmit={handleManualSubmit}
       />
+
+      {/* Modal: Health Report */}
+      {showReportModal && healthReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in" onClick={() => setShowReportModal(false)} />
+           <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300">
+              
+              {/* Header */}
+              <div className="bg-gradient-to-br from-violet-500 to-fuchsia-600 p-6 pb-8 text-white relative flex-shrink-0">
+                 <button onClick={() => setShowReportModal(false)} className="absolute top-4 right-4 text-white/80 hover:text-white">
+                    <X className="w-6 h-6" />
+                 </button>
+                 <div className="flex items-center gap-2 mb-2 opacity-80">
+                    <Calendar className="w-4 h-4" />
+                    <span className="text-xs font-medium tracking-wide">{healthReport.dateRange}</span>
+                 </div>
+                 <h2 className="text-2xl font-bold">健康饮食周报</h2>
+                 
+                 {/* Score Bubble */}
+                 <div className="absolute -bottom-10 right-6 w-20 h-20 bg-white rounded-full flex flex-col items-center justify-center shadow-lg border-4 border-white">
+                    <span className={`text-2xl font-black ${healthReport.score >= 80 ? 'text-emerald-500' : healthReport.score >= 60 ? 'text-amber-500' : 'text-red-500'}`}>
+                      {healthReport.score}
+                    </span>
+                    <span className="text-[9px] text-gray-400 font-bold uppercase">健康分</span>
+                 </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 pt-10 overflow-y-auto">
+                 {/* Summary */}
+                 <div className="mb-6">
+                    <h3 className="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
+                       <Activity className="w-4 h-4 text-violet-500" />
+                       分析总结
+                    </h3>
+                    <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100">
+                      {healthReport.summary}
+                    </p>
+                 </div>
+
+                 {/* Detailed Analysis (New Section) */}
+                 {healthReport.specificAnalysis && (
+                    <div className="mb-6 grid gap-3">
+                       <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
+                          <div className="flex items-center gap-2 mb-2">
+                             <div className="p-1.5 bg-emerald-100 rounded-lg text-emerald-600">
+                                <Carrot className="w-4 h-4" />
+                             </div>
+                             <span className="text-xs font-bold text-gray-800">蔬果摄入</span>
+                          </div>
+                          <p className="text-xs text-gray-600 leading-relaxed">{healthReport.specificAnalysis.fruitVeggie}</p>
+                       </div>
+                       
+                       <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                          <div className="flex items-center gap-2 mb-2">
+                             <div className="p-1.5 bg-blue-100 rounded-lg text-blue-600">
+                                <GlassWater className="w-4 h-4" />
+                             </div>
+                             <span className="text-xs font-bold text-gray-800">水分与补给</span>
+                          </div>
+                          <p className="text-xs text-gray-600 leading-relaxed">{healthReport.specificAnalysis.hydration}</p>
+                       </div>
+
+                       <div className="bg-orange-50/50 p-3 rounded-xl border border-orange-100">
+                          <div className="flex items-center gap-2 mb-2">
+                             <div className="p-1.5 bg-orange-100 rounded-lg text-orange-600">
+                                <ScanLine className="w-4 h-4" />
+                             </div>
+                             <span className="text-xs font-bold text-gray-800">食材多样性</span>
+                          </div>
+                          <p className="text-xs text-gray-600 leading-relaxed">{healthReport.specificAnalysis.variety}</p>
+                       </div>
+                    </div>
+                 )}
+
+                 {/* Trends */}
+                 <div className="mb-6">
+                    <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                       <TrendingUp className="w-4 h-4 text-blue-500" />
+                       饮食趋势
+                    </h3>
+                    <div className="space-y-2">
+                      {healthReport.trends.map((trend, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
+                           <div className="w-1.5 h-1.5 rounded-full bg-blue-300 mt-1.5 flex-shrink-0" />
+                           <span>{trend}</span>
+                        </div>
+                      ))}
+                    </div>
+                 </div>
+
+                 {/* Suggestions */}
+                 <div>
+                    <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                       <Leaf className="w-4 h-4 text-emerald-500" />
+                       改进建议
+                    </h3>
+                    <div className="space-y-3">
+                      {healthReport.suggestions.map((suggestion, i) => (
+                        <div key={i} className="bg-emerald-50/50 p-3 rounded-xl flex gap-3 border border-emerald-100/50">
+                           <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                             {i + 1}
+                           </div>
+                           <p className="text-xs text-emerald-900 font-medium leading-relaxed">
+                             {suggestion}
+                           </p>
+                        </div>
+                      ))}
+                    </div>
+                 </div>
+              </div>
+
+              {/* Footer Button */}
+              <div className="p-4 border-t border-gray-50 bg-white flex-shrink-0">
+                 <button 
+                   onClick={() => setShowReportModal(false)}
+                   className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl active:scale-[0.98] transition-transform"
+                 >
+                   我知道了
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
     </div>
   );
 };
