@@ -15,7 +15,7 @@ const getApiKey = () => {
   return apiKey;
 };
 
-export const analyzeFoodImage = async (base64Image: string): Promise<FoodItem[]> => {
+export const analyzeFoodImage = async (imageUri: string): Promise<FoodItem[]> => {
   const apiKey = getApiKey();
 
   const promptText = `
@@ -65,7 +65,7 @@ export const analyzeFoodImage = async (base64Image: string): Promise<FoodItem[]>
               {
                 type: "image_url",
                 image_url: {
-                  url: `data:image/jpeg;base64,${base64Image}`,
+                  url: imageUri, // Pass full Data URL directly
                   detail: "high"
                 }
               }

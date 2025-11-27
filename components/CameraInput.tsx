@@ -1,3 +1,4 @@
+
 import React, { useRef } from 'react';
 import { Camera, Loader2 } from 'lucide-react';
 
@@ -9,23 +10,52 @@ interface CameraInputProps {
 const CameraInput: React.FC<CameraInputProps> = ({ onImageSelected, isProcessing }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const processImage = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Resize logic: Max dimension 1024px
+        const MAX_SIZE = 1024;
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height *= MAX_SIZE / width));
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width *= MAX_SIZE / height));
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          // Compress to JPEG with 0.7 quality
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          onImageSelected(dataUrl);
+        }
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Reset input so same file can be selected again if needed
+    // Reset input so same file can be selected again
     event.target.value = '';
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
-      const base64Data = result.split(',')[1];
-      if (base64Data) {
-        onImageSelected(base64Data);
-      }
-    };
-    reader.readAsDataURL(file);
+    
+    processImage(file);
   };
 
   const triggerCamera = () => {

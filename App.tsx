@@ -93,13 +93,14 @@ const App: React.FC = () => {
     return 'Snack';
   };
 
-  const handleImageSelected = async (base64Image: string) => {
+  const handleImageSelected = async (imageUri: string) => {
     setStatus(AnalysisStatus.ANALYZING);
     setError(null);
     setActiveTab('home');
 
     try {
-      const items = await analyzeFoodImage(base64Image);
+      // imageUri is now a full Data URL (e.g., "data:image/jpeg;base64,...")
+      const items = await analyzeFoodImage(imageUri);
 
       if (items.length === 0) {
         throw new Error("未能识别出食物，请尝试更清晰的角度。");
@@ -118,7 +119,7 @@ const App: React.FC = () => {
       const newRecord: MealRecord = {
         id: Date.now().toString(),
         timestamp: Date.now(),
-        imageUri: `data:image/jpeg;base64,${base64Image}`,
+        imageUri: imageUri, // Use processed Data URL
         items,
         totalNutrition,
         mealType: getMealTypeByTime(),
@@ -651,95 +652,141 @@ const NutrientRow = ({ label, value, color }: { label: string, value: number, co
 
 const MealCard = ({ record, onDelete }: { record: MealRecord; onDelete: (id: string) => void }) => {
   const [expanded, setExpanded] = useState(false);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const touchStartRef = useRef<number | null>(null);
+  
   const isManual = record.imageUri === MANUAL_IMAGE_PLACEHOLDER;
 
   const mealTypeLabels: Record<string, string> = {
     Breakfast: '早餐', Lunch: '午餐', Dinner: '晚餐', Snack: '加餐'
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (expanded) return; // Disable swipe if expanded
+    touchStartRef.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartRef.current === null || expanded) return;
+    const currentX = e.touches[0].clientX;
+    const diff = currentX - touchStartRef.current;
+    
+    // Limit swipe to left only, max -100px
+    if (diff < 0) {
+      setSwipeOffset(Math.max(diff, -100));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (swipeOffset < -50) {
+      setSwipeOffset(-80); // Snap to open
+    } else {
+      setSwipeOffset(0); // Snap to close
+    }
+    touchStartRef.current = null;
+  };
+
+  const handleClick = () => {
+    if (swipeOffset < 0) {
+      setSwipeOffset(0); // Close swipe first if open
+    } else {
+      setExpanded(!expanded);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-[1.5rem] shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-gray-100/60 overflow-hidden group transition-all duration-300 hover:shadow-md">
-       <div className="p-3 flex gap-3 cursor-pointer" onClick={() => setExpanded(!expanded)}>
-          {/* Image */}
-          <div className={`w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 relative ${isManual ? 'bg-emerald-50 p-5' : 'bg-gray-100'}`}>
-             <img src={record.imageUri} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="food" />
-             <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
-          </div>
-
-          {/* Info */}
-          <div className="flex-1 flex flex-col justify-between py-1">
-             <div>
-                <div className="flex justify-between items-start">
-                   <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[10px] font-bold rounded-md uppercase tracking-wide">
-                      {mealTypeLabels[record.mealType]}
-                   </span>
-                   <span className="text-[10px] text-gray-300 font-medium font-mono">
-                      {new Date(record.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-                   </span>
-                </div>
-                <h3 className="font-bold text-gray-800 mt-2 leading-tight line-clamp-2">
-                  {record.items.map(i => i.name).join(', ')}
-                </h3>
-             </div>
-
-             <div className="flex items-end justify-between">
-                <div className="flex items-baseline gap-1">
-                   <span className="text-xl font-extrabold text-emerald-600 font-mono tracking-tight">{record.totalNutrition.calories}</span>
-                   <span className="text-[10px] text-gray-400 font-bold">kcal</span>
-                </div>
-                <div className={`w-7 h-7 rounded-full bg-gray-50 flex items-center justify-center transition-transform duration-300 ${expanded ? 'rotate-180 bg-gray-100' : ''}`}>
-                   <ChevronDown className="w-4 h-4 text-gray-400" />
-                </div>
-             </div>
-          </div>
+    <div className="relative overflow-hidden rounded-[1.5rem] shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-gray-100/60 transition-shadow duration-300 hover:shadow-md">
+       
+       {/* Background Action (Delete) */}
+       <div className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-center text-white z-0 rounded-r-[1.5rem]">
+         <button 
+            onClick={() => onDelete(record.id)}
+            className="w-full h-full flex flex-col items-center justify-center"
+         >
+           <Trash2 className="w-5 h-5 mb-1" />
+           <span className="text-[10px] font-bold">删除</span>
+         </button>
        </div>
 
-       {/* Details */}
-       <div className={`grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-          <div className="overflow-hidden bg-gray-50/50">
-             <div className="p-4 space-y-6">
-                {record.items.map((item, idx) => (
-                   <div key={idx} className={idx !== 0 ? 'border-t border-gray-200/50 pt-4' : ''}>
-                      <div className="flex justify-between items-center mb-3">
-                         <div className="flex items-center gap-2">
-                           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                           <span className="font-bold text-gray-700 text-sm">{item.name}</span>
-                         </div>
-                         <span className="text-[10px] font-bold text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded text-center min-w-[3rem]">
-                           {item.portion}
-                         </span>
-                      </div>
-                      
-                      {/* Dashboard Grid for Macros */}
-                      <div className="grid grid-cols-4 gap-2 mb-3">
-                         <MacroCard label="热量" value={item.nutrition.calories} unit="" />
-                         <MacroCard label="蛋白" value={item.nutrition.protein} unit="g" accent="emerald" />
-                         <MacroCard label="碳水" value={item.nutrition.carbs} unit="g" accent="amber" />
-                         <MacroCard label="脂肪" value={item.nutrition.fat} unit="g" accent="red" />
-                      </div>
+       {/* Foreground Content */}
+       <div 
+         className="bg-white relative z-10 transition-transform duration-300 ease-out"
+         style={{ transform: `translateX(${swipeOffset}px)` }}
+         onTouchStart={handleTouchStart}
+         onTouchMove={handleTouchMove}
+         onTouchEnd={handleTouchEnd}
+       >
+         <div className="p-3 flex gap-3 cursor-pointer select-none" onClick={handleClick}>
+            {/* Image */}
+            <div className={`w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 relative ${isManual ? 'bg-emerald-50 p-5' : 'bg-gray-100'}`}>
+               <img src={record.imageUri} className="w-full h-full object-cover pointer-events-none" alt="food" />
+            </div>
 
-                      {item.healthTip && (
-                        <div className="bg-emerald-50/50 border border-emerald-100/50 rounded-xl p-3 flex gap-3 items-start">
-                           <Sparkles className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-                           <p className="text-xs text-emerald-800/80 leading-relaxed font-medium">
-                             {item.healthTip}
-                           </p>
+            {/* Info */}
+            <div className="flex-1 flex flex-col justify-between py-1">
+               <div>
+                  <div className="flex justify-between items-start">
+                     <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[10px] font-bold rounded-md uppercase tracking-wide">
+                        {mealTypeLabels[record.mealType]}
+                     </span>
+                     <span className="text-[10px] text-gray-300 font-medium font-mono">
+                        {new Date(record.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                     </span>
+                  </div>
+                  <h3 className="font-bold text-gray-800 mt-2 leading-tight line-clamp-2">
+                    {record.items.map(i => i.name).join(', ')}
+                  </h3>
+               </div>
+
+               <div className="flex items-end justify-between">
+                  <div className="flex items-baseline gap-1">
+                     <span className="text-xl font-extrabold text-emerald-600 font-mono tracking-tight">{record.totalNutrition.calories}</span>
+                     <span className="text-[10px] text-gray-400 font-bold">kcal</span>
+                  </div>
+                  <div className={`w-7 h-7 rounded-full bg-gray-50 flex items-center justify-center transition-transform duration-300 ${expanded ? 'rotate-180 bg-gray-100' : ''}`}>
+                     <ChevronDown className="w-4 h-4 text-gray-400" />
+                  </div>
+               </div>
+            </div>
+         </div>
+
+         {/* Details */}
+         <div className={`grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+            <div className="overflow-hidden bg-gray-50/50">
+               <div className="p-4 space-y-6">
+                  {record.items.map((item, idx) => (
+                     <div key={idx} className={idx !== 0 ? 'border-t border-gray-200/50 pt-4' : ''}>
+                        <div className="flex justify-between items-center mb-3">
+                           <div className="flex items-center gap-2">
+                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                             <span className="font-bold text-gray-700 text-sm">{item.name}</span>
+                           </div>
+                           <span className="text-[10px] font-bold text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded text-center min-w-[3rem]">
+                             {item.portion}
+                           </span>
                         </div>
-                      )}
-                   </div>
-                ))}
+                        
+                        {/* Dashboard Grid for Macros */}
+                        <div className="grid grid-cols-4 gap-2 mb-3">
+                           <MacroCard label="热量" value={item.nutrition.calories} unit="" />
+                           <MacroCard label="蛋白" value={item.nutrition.protein} unit="g" accent="emerald" />
+                           <MacroCard label="碳水" value={item.nutrition.carbs} unit="g" accent="amber" />
+                           <MacroCard label="脂肪" value={item.nutrition.fat} unit="g" accent="red" />
+                        </div>
 
-                <div className="flex justify-end pt-2">
-                   <button 
-                     onClick={(e) => { e.stopPropagation(); onDelete(record.id); }}
-                     className="flex items-center gap-1 text-xs font-bold text-red-400 hover:text-red-600 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors"
-                   >
-                     <Trash2 className="w-3.5 h-3.5" />
-                     删除记录
-                   </button>
-                </div>
-             </div>
-          </div>
+                        {item.healthTip && (
+                          <div className="bg-emerald-50/50 border border-emerald-100/50 rounded-xl p-3 flex gap-3 items-start">
+                             <Sparkles className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                             <p className="text-xs text-emerald-800/80 leading-relaxed font-medium">
+                               {item.healthTip}
+                             </p>
+                          </div>
+                        )}
+                     </div>
+                  ))}
+               </div>
+            </div>
+         </div>
        </div>
     </div>
   );
