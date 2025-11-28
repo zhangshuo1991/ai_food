@@ -6,8 +6,15 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       server: {
-        port: 3000,
+        port: 4080,
         host: '0.0.0.0',
+        proxy: {
+          '/dashscope-api': {
+            target: 'https://dashscope.aliyuncs.com',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/dashscope-api/, ''),
+          },
+        },
       },
       plugins: [react()],
       define: {

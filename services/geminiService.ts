@@ -4,8 +4,46 @@ import { FoodItem, MealRecord, HealthReport } from "../types";
 // NOTE: Switched to OpenAI GPT model (GPT-4o) as requested.
 // Keeping the filename 'geminiService.ts' to maintain import compatibility with App.tsx.
 
-const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const MODEL_NAME = "gpt-4o";
+const DEFAULT_API_BASE_URL = "https://dashscope.aliyuncs.com";
+const DEFAULT_PROXY_PATH = "/dashscope-api";
+const API_ENDPOINT = "/compatible-mode/v1/chat/completions";
+const API_BASE_URL = getApiBaseUrl();
+const OPENAI_API_URL = `${API_BASE_URL}${API_ENDPOINT}`;
+const MODEL_NAME = "qwen3-vl-flash";
+
+function getApiBaseUrl() {
+  try {
+    // Prefer explicit env overrides
+    const env =
+      typeof import.meta !== "undefined"
+        ? (import.meta as unknown as { env?: Record<string, string | boolean> }).env
+        : undefined;
+    if (env) {
+      if (env.VITE_DASHSCOPE_BASE_URL) {
+        return env.VITE_DASHSCOPE_BASE_URL.replace(/\/$/, "");
+      }
+      if (env.VITE_DASHSCOPE_PROXY_PATH) {
+        return env.VITE_DASHSCOPE_PROXY_PATH.replace(/\/$/, "");
+      }
+      if (env.DEV) {
+        return DEFAULT_PROXY_PATH;
+      }
+    }
+  } catch (e) {
+    // Ignore env detection failures
+  }
+
+  // Fallback to runtime injected variables (e.g. process.env)
+  try {
+    if (typeof process !== "undefined" && process.env?.DASHSCOPE_BASE_URL) {
+      return process.env.DASHSCOPE_BASE_URL.replace(/\/$/, "");
+    }
+  } catch (e) {
+    // Ignore if process is not defined
+  }
+
+  return DEFAULT_API_BASE_URL;
+}
 
 const getApiKey = () => {
   let apiKey = '';
