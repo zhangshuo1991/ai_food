@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Utensils, Calendar, Clock, ChevronDown, Trash2, Leaf, Flame, Sparkles, ArrowDown, Keyboard, AlertCircle, Search, Filter, X, Camera, Home, History, Plus, FileText, Activity, ChevronRight, TrendingUp, Carrot, GlassWater, ScanLine } from 'lucide-react';
+import { Utensils, Calendar, ChevronDown, Trash2, Leaf, Flame, Sparkles, AlertCircle, Search, Filter, X, Home, History, Plus, Activity, ChevronRight, TrendingUp, Carrot, GlassWater, ScanLine } from 'lucide-react';
 import { analyzeFoodImage, generateHealthReport } from './services/geminiService';
 import { initDB, getAllRecords, addRecord as addDbRecord, deleteRecord as deleteDbRecord } from './services/dbService';
 import { FoodItem, MealRecord, AnalysisStatus, HealthReport } from './types';
@@ -441,7 +440,7 @@ const App: React.FC = () => {
             <div className="relative -mt-10 mx-2">
                {/* Tooltip */}
                {todaysRecords.length === 0 && !error && activeTab === 'home' && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-50 pointer-events-none">
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-50 pointer-events-none w-max">
                      <div className="flex flex-col items-center animate-bounce">
                         <div className="bg-gray-800 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg whitespace-nowrap">
                            拍一拍

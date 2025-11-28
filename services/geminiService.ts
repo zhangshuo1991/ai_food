@@ -8,10 +8,36 @@ const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const MODEL_NAME = "gpt-4o";
 
 const getApiKey = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("未配置 API Key。请确保环境变量 API_KEY 已设置为有效的 OpenAI Key。");
+  let apiKey = '';
+  
+  // 1. Attempt to read from process.env (Node/Webpack/Create-React-App)
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      apiKey = process.env.API_KEY || process.env.REACT_APP_API_KEY || '';
+    }
+  } catch (e) {
+    // Ignore errors accessing process
   }
+
+  // 2. Attempt to read from import.meta.env (Vite)
+  // Use explicit checks to avoid runtime errors in environments that don't support import.meta
+  if (!apiKey) {
+    try {
+      // @ts-ignore
+      if (typeof import.meta !== 'undefined' && import.meta.env) {
+        // @ts-ignore
+        apiKey = import.meta.env.VITE_API_KEY || '';
+      }
+    } catch (e) {
+      // Ignore errors accessing import.meta
+    }
+  }
+
+  if (!apiKey) {
+    console.error("API Key missing. Please set VITE_API_KEY (Vite) or REACT_APP_API_KEY (CRA) in your .env file.");
+    throw new Error("未配置 API Key。请在本地环境(.env)中配置 API_KEY (或 VITE_API_KEY)。");
+  }
+  
   return apiKey;
 };
 
